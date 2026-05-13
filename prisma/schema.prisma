@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/config/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id         Int         @id @default(autoincrement())
+  uid        String      @unique(map: "User_uid_key") @default(uuid())
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+  deleted_at DateTime?
+  name       String      @db.VarChar(100)
+  email      String      @unique(map: "User_email_key") @db.VarChar(255)
+  password   String      @db.VarChar(255)
+  userTokens UserToken[] // relation field
+
+  @@map("users")
+}
+
+model UserToken {
+  id         Int       @id @default(autoincrement())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  user       User      @relation(fields: [userId], references: [id])
+  userId     Int       @map("user_id") // relation scalar field  (used in the `@relation` attribute above)
+  value      String    @db.VarChar(255)
+  token_type String    @db.VarChar(50)
+  expires_at DateTime
+
+  @@map("user_tokens")
+}
