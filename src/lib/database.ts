@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "./generated/prisma/client";
-import { logger } from "./logging";
 
 const adapter = new PrismaMariaDb({
   host: Bun.env.DATABASE_HOST,

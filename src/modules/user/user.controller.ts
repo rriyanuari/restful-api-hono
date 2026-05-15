@@ -4,6 +4,7 @@ import { toUserResponse } from "./user.model";
 import { UserValidation } from "./user.validation";
 
 import { prisma } from "~/lib/database";
+import { hashPassword } from "~/utils/password";
 
 export const getUsers = async (c: Context) => {
   const users = await prisma.user.findMany({
@@ -17,7 +18,7 @@ export const getUsers = async (c: Context) => {
     },
     where: {
       deleted_at: null,
-    }
+    },
   });
 
   return c.json({
@@ -44,7 +45,7 @@ export const createUsers = async (c: Context) => {
   const body = await c.req.json();
   const { email, name, password } = UserValidation.CREATE.parse(body);
 
-  const isExist = await prisma.user.findFirst({
+  const isExist = await prisma.user.findUnique({
     where: {
       email,
     },
@@ -56,10 +57,7 @@ export const createUsers = async (c: Context) => {
     });
   }
 
-  const passwordHash = await Bun.password.hash(password, {
-    algorithm: "bcrypt",
-    cost: 10,
-  });
+  const passwordHash = await hashPassword(password);
 
   const user = await prisma.user.create({
     data: {
@@ -99,7 +97,7 @@ export const updateUsers = async (c: Context) => {
 
   // cek email duplicate selain user saat ini
   if (email) {
-    const isExist = await prisma.user.findFirst({
+    const isExist = await prisma.user.findUnique({
       where: {
         email,
         NOT: {
@@ -157,13 +155,16 @@ export const softDeleteUsers = async (c: Context) => {
     });
   }
 
-  const user = await prisma.user.update({
+  const deletedEmail = `${existingUser.email}#deleted#${Date.now()}`;
+
+  await prisma.user.update({
     where: {
       uid: id,
     },
     data: {
+      email: deletedEmail,
       deleted_at: new Date(),
-    }
+    },
   });
 
   return c.json(
