@@ -1,6 +1,6 @@
 import { prisma } from "~/lib/database";
 import { buildCrudRouter } from "~/core/crud/build-crud-router";
-import { authAccessMiddleware } from "~/middleware/auth.midlleware";
+import { authAccessMiddleware } from "~/middleware/auth.middleware.ts";
 import { formatUser, hashUserPassword } from "./user.format";
 import { createUserSchema, updateUserSchema } from "./user.validation";
 

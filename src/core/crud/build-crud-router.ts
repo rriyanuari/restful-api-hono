@@ -1,12 +1,13 @@
 import { Context, Hono, MiddlewareHandler } from "hono";
+import type { ZodType } from "zod";
 
 import { buildPagination } from "~/core/query/build-pagination";
 import { buildOrderBy } from "~/core/query/build-order-by";
 import { buildWhere } from "~/core/query/build-where";
 import { buildInclude } from "~/core/query/build-include";
-import type { ZodType } from "zod";
-import { resolveAuthUser } from "../query/resolve-auth-user";
-import { formatMany, formatSingle } from "~/utils/format-response";
+import { resolveAuthUser } from "~/utils/resolveAuthUser";
+import { formatMany, formatSingle } from "~/utils/formatResponse";
+import { permissionMiddleware } from "~/middleware/permission.middleware";
 
 type Formatter<T = any> = (data: T) => any;
 
@@ -14,9 +15,18 @@ type CrudHook = (data: any, c: Context) => Promise<any> | any;
 
 type CrudAfterHook = (data: any, c: Context) => Promise<void> | void;
 
+type CrudPermissions = {
+  list?: string;
+  view?: string;
+  create?: string;
+  update?: string;
+  delete?: string;
+};
+
 type CrudOptions = {
   model: any;
   middlewares?: MiddlewareHandler[];
+  permissions?: CrudPermissions;
   useUserScope?: boolean;
 
   formatter?: {
@@ -46,13 +56,30 @@ type CrudOptions = {
   };
 };
 
+function buildRouteMiddlewares(
+  globalMiddlewares: MiddlewareHandler[] = [],
+  permission?: string,
+): MiddlewareHandler[] {
+  const middlewares: MiddlewareHandler[] = [
+    ...globalMiddlewares,
+  ]
+
+  if (permission) {
+    middlewares.push(
+      permissionMiddleware(permission),
+    )
+  }
+
+  return middlewares
+}
+
 export function buildCrudRouter(options: CrudOptions) {
   const router = new Hono();
 
-  // Apply middlewares
-  if (options.middlewares?.length) {
-    router.use("*", ...options.middlewares);
-  }
+  // // Apply middlewares
+  // if (options.middlewares?.length) {
+  //   router.use("*", ...options.middlewares);
+  // }
 
   const index = async (c: Context) => {
     const query = c.req.query();
@@ -113,7 +140,7 @@ export function buildCrudRouter(options: CrudOptions) {
   const store = async (c: Context) => {
     let body = await c.req.json();
 
-    if(options.validation?.create) {
+    if (options.validation?.create) {
       body = options.validation.create.parse(body);
     }
 
@@ -124,10 +151,7 @@ export function buildCrudRouter(options: CrudOptions) {
     }
 
     if (options.hooks?.beforeCreate) {
-      body = await options.hooks.beforeCreate(
-        body,
-        c,
-      )
+      body = await options.hooks.beforeCreate(body, c);
     }
 
     const created = await options.model.create({
@@ -135,10 +159,7 @@ export function buildCrudRouter(options: CrudOptions) {
     });
 
     if (options.hooks?.afterCreate) {
-      await options.hooks.afterCreate(
-        created,
-        c,
-      )
+      await options.hooks.afterCreate(created, c);
     }
 
     return c.json(
@@ -158,10 +179,7 @@ export function buildCrudRouter(options: CrudOptions) {
     }
 
     if (options.hooks?.beforeUpdate) {
-      body = await options.hooks.beforeUpdate(
-        body,
-        c,
-      )
+      body = await options.hooks.beforeUpdate(body, c);
     }
 
     const updated = await options.model.update({
@@ -172,10 +190,7 @@ export function buildCrudRouter(options: CrudOptions) {
     });
 
     if (options.hooks?.afterUpdate) {
-      await options.hooks.afterUpdate(
-        updated,
-        c,
-      )
+      await options.hooks.afterUpdate(updated, c);
     }
 
     return c.json({
@@ -205,7 +220,15 @@ export function buildCrudRouter(options: CrudOptions) {
     destroy,
   };
 
-  !options.disableRoutes?.index && router.get("/", handlers.index);
+  !options.disableRoutes?.index &&
+    router.get(
+      "/",
+      ...buildRouteMiddlewares(
+        options.middlewares,
+        options.permissions?.list,
+      ),
+      handlers.index,
+    );
   !options.disableRoutes?.show && router.get("/:id", handlers.show);
   !options.disableRoutes?.store && router.post("/", handlers.store);
   !options.disableRoutes?.update && router.put("/:id", handlers.update);

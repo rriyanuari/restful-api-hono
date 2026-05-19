@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { authRefreshMiddleware } from "~/middleware/auth.midlleware"
+import { authRefreshMiddleware } from "~/middleware/auth.middleware.ts"
 import { loginHandler, refreshHandler, registerHandler } from "./auth.handler"
 
 const authRoutes = new Hono()

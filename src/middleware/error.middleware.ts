@@ -100,6 +100,21 @@ export const errorHandler: ErrorHandler = (err, c) => {
   }
 
   /**
+   * PRISMA VALIDATION ERROR
+   */
+  if (err instanceof Prisma.PrismaClientValidationError) {
+    logError(c, err, 400, "prisma_validation_error");
+
+    return c.json(
+      errorResponse({
+        message: "Invalid query request",
+        errors: isProduction ? undefined : err.message,
+      }),
+      400,
+    );
+  }
+
+  /**
    * PRISMA ERROR
    */
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
