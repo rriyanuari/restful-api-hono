@@ -1,11 +1,11 @@
 import { Hono } from "hono"
-import { login, refresh, register } from "./auth.controller"
-import { authMiddleware } from "~/middleware/auth.midlleware"
+import { authRefreshMiddleware } from "~/middleware/auth.midlleware"
+import { loginHandler, refreshHandler, registerHandler } from "./auth.handler"
 
 const authRoutes = new Hono()
 
-authRoutes.post('/register', register)
-authRoutes.post('/login', login)
-authRoutes.get('/refresh', authMiddleware, refresh)
+authRoutes.post('/register', registerHandler)
+authRoutes.post('/login', loginHandler)
+authRoutes.post('/refresh', authRefreshMiddleware, refreshHandler)
 
 export default authRoutes

@@ -3,7 +3,12 @@ import type { JwtVariables } from "hono/jwt";
 
 export type AuthVariables = JwtVariables;
 
-export const authMiddleware = jwt({
-  secret: Bun.env.JWT_SECRET_KEY!,
+export const authAccessMiddleware = jwt({
+  secret: Bun.env.JWT_SECRET_ACCESS_KEY!,
+  alg: "HS256",
+});
+
+export const authRefreshMiddleware = jwt({
+  secret: Bun.env.JWT_SECRET_REFRESH_KEY!,
   alg: "HS256",
 });

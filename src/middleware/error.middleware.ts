@@ -1,141 +1,162 @@
-import type { Context, ErrorHandler, NotFoundHandler } from 'hono'
-import { HTTPException } from 'hono/http-exception'
-import type { StatusCode } from 'hono/utils/http-status'
-import { ZodError } from 'zod'
-import { logger } from '~/lib/logger'
-import { getClientIp } from '~/utils/getIp'
+import type { Context, ErrorHandler, NotFoundHandler } from "hono";
+import { HTTPException } from "hono/http-exception";
+import type { ContentfulStatusCode, StatusCode } from "hono/utils/http-status";
+import { ZodError } from "zod";
 
-const isProduction = process.env.NODE_ENV === 'production'
+import { logger } from "~/lib/logger";
+import { getClientIp } from "~/utils/getIp";
+import { AppError } from "~/core/errors/app-error";
+import { Prisma } from "~/lib/generated/prisma/client";
+import { isProduction } from "~/utils/environment";
 
-type ErrorWithStatus = Error & { status?: number }
-type RequestLogLevel = 'warn' | 'error'
-type RequestErrorKind =
-  | 'http_exception'
-  | 'validation_error'
-  | 'internal_error'
-  | 'not_found'
+type ErrorWithStatus = Error & { status?: number };
 
 const getRequestLogMeta = (c: Context) => ({
   method: c.req.method,
   path: c.req.path,
   url: c.req.url,
-  userAgent: c.req.header('user-agent'),
+  userAgent: c.req.header("user-agent"),
   ip: getClientIp(c),
-})
+});
 
-const getStatusCode = (err: ErrorWithStatus, c: Context): StatusCode => {
-  const currentStatus = err.status ?? c.newResponse(null).status
-  return (currentStatus !== 200 ? currentStatus : 500) as StatusCode
-}
-
-const logRequestIssue = (
-  c: Context,
-  {
-    event,
-    level,
+const logError = (c: Context, err: Error, status: number, type: string) => {
+  logger.error(type, {
+    logGroup: "error",
     status,
-    message,
-    errorKind,
-    stack,
-  }: {
-    event: string
-    level: RequestLogLevel
-    status: number
-    message: string
-    errorKind: RequestErrorKind
-    stack?: string
-  },
-) => {
-  const meta = {
-    logGroup: 'error',
-    errorKind,
-    status,
-    message,
-    ...getRequestLogMeta(c),
-    ...(stack ? { stack } : {}),
-  }
-
-  if (level === 'warn') {
-    logger.warn(event, meta)
-    return
-  }
-
-  logger.error(event, meta)
-}
-
-const toErrorResponse = (message: string, stack?: string) => ({
-  errors: message,
-  ...(isProduction || !stack ? {} : { stack }),
-})
-
-// Request-scoped failures belong to the "error" group.
-// Uncaught exceptions and unhandled rejections are routed by Winston in logger.ts.
-export const errorHandler: ErrorHandler = (err, c) => {
-  if (err instanceof HTTPException) {
-    const level: RequestLogLevel = err.status >= 500 ? 'error' : 'warn'
-
-    logRequestIssue(c, {
-      event: 'HTTP exception',
-      level,
-      status: err.status,
-      message: err.message,
-      errorKind: 'http_exception',
-      ...(level === 'error' ? { stack: err.stack } : {}),
-    })
-
-    c.status(err.status)
-
-    return c.json(toErrorResponse(err.message, err.stack))
-  }
-
-  if (err instanceof ZodError) {
-    logRequestIssue(c, {
-      event: 'Validation error',
-      level: 'warn',
-      status: 400,
-      message: 'Request validation failed',
-      errorKind: 'validation_error',
-    })
-
-    c.status(400)
-
-    return c.json({
-      errors: err.issues.map((issue) => ({
-        field: issue.path.join('.'),
-        message: issue.message,
-      })),
-    })
-  }
-
-  const statusCode = getStatusCode(err as ErrorWithStatus, c)
-
-  logRequestIssue(c, {
-    event: 'Unhandled request error',
-    level: 'error',
-    status: statusCode,
     message: err.message,
-    errorKind: 'internal_error',
     stack: err.stack,
-  })
+    ...getRequestLogMeta(c),
+  });
+};
 
-  c.status(statusCode)
+const errorResponse = ({
+  message,
+  errors,
+  stack,
+}: {
+  message: string;
+  errors?: unknown;
+  stack?: string;
+}) => ({
+  success: false,
+  message,
+  // only show errors in development or explicitly exposed
+  ...(!isProduction && errors ? { errors } : {}),
 
-  return c.json(toErrorResponse(err.message, err.stack))
-}
+  // only show stack in development
+  ...(!isProduction && stack ? { stack } : {}),
+});
 
-export const notFound: NotFoundHandler = (c) => {
-  logRequestIssue(c, {
-    event: 'Route not found',
-    level: 'warn',
-    status: 404,
-    message: 'Not Found - No matching route',
-    errorKind: 'not_found',
-  })
+export const errorHandler: ErrorHandler = (err, c) => {
+  /**
+   * APP ERROR
+   */
+  if (err instanceof AppError) {
+    logError(c, err, err.status, "app_error");
+
+    return c.json(
+      errorResponse({
+        message: err.message,
+        errors: err.errors,
+      }),
+      err.status as ContentfulStatusCode,
+    );
+  }
+
+  /**
+   * HTTP EXCEPTION
+   */
+  if (err instanceof HTTPException) {
+    let message = err.message;
+
+    if (err.status === 401) {
+      message = "Authentication required";
+    }
+
+    if (err.status === 403) {
+      message = "Access forbidden";
+    }
+
+    return c.json(
+      errorResponse({
+        message: message,
+        stack: err.stack,
+      }),
+      err.status,
+    );
+  }
+
+  /**
+   * ZOD ERROR
+   */
+  if (err instanceof ZodError) {
+    return c.json(
+      errorResponse({
+        message: "Validation Error",
+        errors: err.flatten(),
+      }),
+      422,
+    );
+  }
+
+  /**
+   * PRISMA ERROR
+   */
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    // Unique constraint
+    if (err.code === "P2002") {
+      return c.json(
+        errorResponse({
+          message: "Duplicate data",
+          errors: isProduction ? undefined : err.meta,
+        }),
+        409,
+      );
+    }
+
+    // Record not found
+    if (err.code === "P2025") {
+      return c.json(
+        errorResponse({
+          message: "Data not found",
+        }),
+        404,
+      );
+    }
+
+    // Foreign key constraint
+    if (err.code === "P2003") {
+      return c.json(
+        errorResponse({
+          message: "Invalid relation reference",
+        }),
+        400,
+      );
+    }
+  }
+
+  /**
+   * UNKNOWN ERROR
+   */
+  const statusCode = ((err as ErrorWithStatus).status || 500) as StatusCode;
+
+  logError(c, err, statusCode, "internal_error");
 
   return c.json(
+    errorResponse({
+      message: err.message || "Internal Server Error",
+      stack: err.stack,
+    }),
+    statusCode as ContentfulStatusCode,
+  );
+};
+
+export const notFound: NotFoundHandler = (c) => {
+  return c.json(
     {
-      message: `Not Found - [${c.req.method}]:[${c.req.path}]`,
+      success: false,
+      message: `Not Found - [${c.req.method}] ${c.req.path}`,
     },
     404,
-  )
-}
+  );
+};

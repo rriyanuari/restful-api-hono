@@ -33,6 +33,7 @@ model UserToken {
   device_type String?    @db.VarChar(20)
   expires_at  DateTime
 
+  @@unique([value], name: "userToken_value_key") // unique constraint for value
   @@unique([userId, device_type], name: "userId_device_type_key") // unique constraint for userId and device_type
   @@map("user_tokens")
 }

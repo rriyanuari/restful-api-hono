@@ -32,7 +32,11 @@ const exp =
     sub: user.uid,
     exp,
   };
-  const secret = Bun.env.JWT_SECRET_KEY!;
+  const secretAccess = Bun.env.JWT_SECRET_ACCESS_KEY!;
+  const secretRefresh = Bun.env.JWT_SECRET_REFRESH_KEY!;
+
+  const secret = type === "access" ? secretAccess : secretRefresh;
+
   const token = await sign(payload, secret, 'HS256');
 
   return {token, exp};

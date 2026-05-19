@@ -1,12 +1,30 @@
-import { Hono } from "hono"
-import { createUsers, getUserById, getUsers, softDeleteUsers, updateUsers } from "./user.controller"
+import { prisma } from "~/lib/database";
+import { buildCrudRouter } from "~/core/crud/build-crud-router";
+import { authAccessMiddleware } from "~/middleware/auth.midlleware";
+import { formatUser, hashUserPassword } from "./user.format";
+import { createUserSchema, updateUserSchema } from "./user.validation";
 
-const userRoutes = new Hono()
+const crud = buildCrudRouter({
+  model: prisma.user,
+  middlewares: [authAccessMiddleware],
+  useUserScope: false,
 
-userRoutes.get('/', getUsers)
-userRoutes.get('/:id', getUserById)
-userRoutes.post('/', createUsers)
-userRoutes.patch('/:id', updateUsers)
-userRoutes.delete('/:id', softDeleteUsers)
+  formatter: {
+    single: formatUser,
+    many: (users) => users.map(formatUser),
+  },
 
-export default userRoutes
+  validation: {
+    create: createUserSchema,
+    update: updateUserSchema,
+  },
+
+  hooks: {
+    beforeCreate: hashUserPassword,
+    beforeUpdate: hashUserPassword,
+  },
+});
+
+const userRoutes = crud.router;
+
+export default userRoutes;
