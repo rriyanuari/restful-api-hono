@@ -6,7 +6,6 @@ export const createPermissionSchema = z.object({
   code: z
     .string()
     .min(1)
-    .regex(/^[a-z0-9_]+$/),
 });
 
 export const updatePermissionSchema = createPermissionSchema.partial();

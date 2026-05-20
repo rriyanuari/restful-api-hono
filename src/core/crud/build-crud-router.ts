@@ -8,20 +8,13 @@ import { buildInclude } from "~/core/query/build-include";
 import { resolveAuthUser } from "~/utils/resolveAuthUser";
 import { formatMany, formatSingle } from "~/utils/formatResponse";
 import { permissionMiddleware } from "~/middleware/permission.middleware";
+import { CrudPermissions } from "~/types/auth";
 
 type Formatter<T = any> = (data: T) => any;
 
 type CrudHook = (data: any, c: Context) => Promise<any> | any;
 
 type CrudAfterHook = (data: any, c: Context) => Promise<void> | void;
-
-type CrudPermissions = {
-  list?: string;
-  view?: string;
-  create?: string;
-  update?: string;
-  delete?: string;
-};
 
 type CrudOptions = {
   model: any;
@@ -56,30 +49,13 @@ type CrudOptions = {
   };
 };
 
-function buildRouteMiddlewares(
-  globalMiddlewares: MiddlewareHandler[] = [],
-  permission?: string,
-): MiddlewareHandler[] {
-  const middlewares: MiddlewareHandler[] = [
-    ...globalMiddlewares,
-  ]
-
-  if (permission) {
-    middlewares.push(
-      permissionMiddleware(permission),
-    )
-  }
-
-  return middlewares
-}
-
 export function buildCrudRouter(options: CrudOptions) {
   const router = new Hono();
 
   // // Apply middlewares
-  // if (options.middlewares?.length) {
-  //   router.use("*", ...options.middlewares);
-  // }
+  if (options.middlewares?.length) {
+    router.use("*", ...options.middlewares);
+  }
 
   const index = async (c: Context) => {
     const query = c.req.query();
@@ -220,19 +196,40 @@ export function buildCrudRouter(options: CrudOptions) {
     destroy,
   };
 
-  !options.disableRoutes?.index &&
-    router.get(
-      "/",
-      ...buildRouteMiddlewares(
-        options.middlewares,
-        options.permissions?.list,
-      ),
-      handlers.index,
-    );
-  !options.disableRoutes?.show && router.get("/:id", handlers.show);
-  !options.disableRoutes?.store && router.post("/", handlers.store);
-  !options.disableRoutes?.update && router.put("/:id", handlers.update);
-  !options.disableRoutes?.destroy && router.delete("/:id", handlers.destroy);
+  if (!options.disableRoutes?.index) {
+    if (options?.permissions?.view) {
+      router.use("/", permissionMiddleware(options.permissions.view));
+    }
+    router.get("/", handlers.index);
+  }
+
+  if (!options.disableRoutes?.show) {
+    if (options?.permissions?.view) {
+      router.use("/:id", permissionMiddleware(options.permissions.view));
+    }
+    router.get("/:id", handlers.show);
+  }
+
+  if (!options.disableRoutes?.store) {
+    if (options?.permissions?.create) {
+      router.use("/", permissionMiddleware(options.permissions.create));
+    }
+    router.post("/", handlers.store);
+  }
+
+  if (!options.disableRoutes?.update) {
+    if (options?.permissions?.update) {
+      router.use("/:id", permissionMiddleware(options.permissions.update));
+    }
+    router.put("/:id", handlers.update);
+  }
+
+  if (!options.disableRoutes?.destroy) {
+    if (options?.permissions?.delete) {
+      router.use("/:id", permissionMiddleware(options.permissions.delete));
+    }
+    router.delete("/:id", handlers.destroy);
+  }
 
   return { handlers, router };
 }

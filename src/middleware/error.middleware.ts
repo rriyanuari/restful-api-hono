@@ -77,6 +77,8 @@ export const errorHandler: ErrorHandler = (err, c) => {
       message = "Access forbidden";
     }
 
+    logError(c, err, (err as ErrorWithStatus).status || 500, "http_exception");
+
     return c.json(
       errorResponse({
         message: message,
@@ -90,6 +92,8 @@ export const errorHandler: ErrorHandler = (err, c) => {
    * ZOD ERROR
    */
   if (err instanceof ZodError) {
+    logError(c, err, 422, "validation_error");
+
     return c.json(
       errorResponse({
         message: "Validation Error",
@@ -120,6 +124,8 @@ export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     // Unique constraint
     if (err.code === "P2002") {
+      logError(c, err, 409, "prisma_known_error");
+
       return c.json(
         errorResponse({
           message: "Duplicate data",
@@ -131,6 +137,8 @@ export const errorHandler: ErrorHandler = (err, c) => {
 
     // Record not found
     if (err.code === "P2025") {
+      logError(c, err, 404, "prisma_known_error");
+
       return c.json(
         errorResponse({
           message: "Data not found",
@@ -141,6 +149,8 @@ export const errorHandler: ErrorHandler = (err, c) => {
 
     // Foreign key constraint
     if (err.code === "P2003") {
+      logError(c, err, 400, "prisma_known_error");
+
       return c.json(
         errorResponse({
           message: "Invalid relation reference",

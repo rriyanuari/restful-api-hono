@@ -3,6 +3,7 @@ import { errorHandler, notFound } from './middleware/error.middleware'
 import { loggerMiddleware } from './middleware/logger.middlewares'
 
 import apiRoutes from './routes'
+import { getRouterName, showRoutes } from 'hono/dev'
 
 const app = new Hono()
 

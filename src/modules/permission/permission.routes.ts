@@ -1,16 +1,18 @@
 import { prisma } from "~/lib/database";
 import { buildCrudRouter } from "~/core/crud/build-crud-router";
-import { authAccessMiddleware } from "~/middleware/auth.middleware.ts";
+import { authAccessMiddleware } from "~/middleware/auth.middleware";
 import { formatPermission } from "./permission.format";
 import {
   createPermissionSchema,
   updatePermissionSchema,
 } from "./permission.validation";
+import { permissionMap } from "~/core/rbac/permission-map";
 
 const crud = buildCrudRouter({
   model: prisma.permission,
   middlewares: [authAccessMiddleware],
   useUserScope: false,
+  // permissions: permissionMap.permission,
 
   formatter: {
     single: formatPermission,

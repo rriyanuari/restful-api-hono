@@ -34,9 +34,9 @@ export function formatUser(user: UserWithOptionalInclude) {
       createdAt: token.created_at,
       updatedAt: token.updated_at,
     })),
-    userRoles: user.userRoles.map((userRole) => ({
-      roleName: userRole.role.name,
-      permissions: userRole.role.rolePermissions.map(
+    userRoles: user?.userRoles?.map((userRole) => ({
+      roleName: userRole?.role.name,
+      permissions: userRole?.role.rolePermissions?.map(
         (rp) => rp.permission.name,
       ),
     })),
